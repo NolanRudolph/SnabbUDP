@@ -62,13 +62,11 @@ function run (args)
         end
 
         local data_file = args[1]
-        local pci = args[2]
-        local IF = args[3]
-	local ether_dst = args[4]
-	local port = args[5]
-	local ip_dst = args[6]
-
-        local c = config.new()
+        local IF = args[2]
+	local ip_dst = args[3]
+	local port = args[4]
+        
+	local c = config.new()
 	-- config.app(c, "nic", IntelX520, {pciaddr = pci})
 	local RawSocket = raw_sock.RawSocket
 	config.app(c, "server", RawSocket, IF)
