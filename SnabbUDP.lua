@@ -9,6 +9,7 @@ local packet =   require("core.packet")
 local ethernet = require("lib.protocol.ethernet")
 local ipv4 =     require("lib.protocol.ipv4")
 local udp =      require("lib.protocol.udp")
+local datagram = require("lib.protocol.datagram")
 local raw_sock = require("apps.socket.raw")
 local transmit, receive = link.transmit, link.receive
 
@@ -35,12 +36,14 @@ function Sender:new(data, ip_dst, port)
 			dst_port = port,
                 	-- IMPLEMENT len = ???
                 	-- IMPLEMENT checksum = ???
-		})
+		}),
+		dgram = datagram:new()
 	}
 	return setmetatable(o, {__index = Sender})
 end
 
-function Sender:genPacket()
+function Sender:gen_packet()
+	print("Hi! You made it to gen_packet()!")
 	local p = packet.allocate()
 	-- Size of Ethernet Header = 14
         -- Size of IP Header = 20
@@ -84,13 +87,12 @@ function run (args)
 	config.app(c, "server", RawSocket, IF)
 	--config.link(c, "server.tx -> server.rx")
         
-	engine.configure(c)
-	
-	print("Bouta send...")
 	sender = Sender:new()
 	config.app(c, "sender", sender, 
 		   {data=data_file, ip_dst=ip_dst, port=port})
 	print("We're sending?")
 	config.link(c, "sender.output -> server.rx")
+	
+	engine.configure(c)
         engine.main({report = {showlinks=true}})
 end
