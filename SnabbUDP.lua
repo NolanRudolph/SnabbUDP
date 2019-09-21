@@ -4,6 +4,7 @@ Sender = {}
 
 local ffi =      require("ffi")
 local link =     require("core.link")
+local app =      require("core.app")
 local lib =      require("core.lib")
 local packet =   require("core.packet")
 local ethernet = require("lib.protocol.ethernet")
@@ -20,6 +21,7 @@ function Sender:new(data, ip_dst, port)
 	{
 		ether = ethernet:new(
 		{
+			ether_dhost = "90:e2:ba:b3:ba:08",
 			ether_type = 8
 		}),
 		ip = ipv4:new(
@@ -43,7 +45,6 @@ function Sender:new(data, ip_dst, port)
 end
 
 function Sender:gen_packet()
-	print("Hi! You made it to gen_packet()!")
 	local p = packet.allocate()
 	-- Size of Ethernet Header = 14
         -- Size of IP Header = 20
@@ -54,15 +55,14 @@ function Sender:gen_packet()
 	self.dgram:new(p)
 	self.dgram:push(self.udp)
 	self.dgram:push(self.ip)
-	self.dgram:push(self.ether)	
+	self.dgram:push(self.ether)
 	return self.dgram:packet()
 end
 
 function Sender:pull()
-	print("Hi! You made it to Sender:sendPacket()!")
-	link.transmit("server", self:gen_packet())
+	print("Sending packet!")
+	return self:gen_packet()
 end
-
 
 
 
@@ -85,14 +85,12 @@ function run (args)
 	local c = config.new()
 	local RawSocket = raw_sock.RawSocket
 	config.app(c, "server", RawSocket, IF)
-	--config.link(c, "server.tx -> server.rx")
         
 	sender = Sender:new()
 	config.app(c, "sender", sender, 
 		   {data=data_file, ip_dst=ip_dst, port=port})
-	print("We're sending?")
-	config.link(c, "sender.output -> server.rx")
+	config.link(c, "sender.output->server.input")
 	
 	engine.configure(c)
-        engine.main({report = {showlinks=true}})
+        engine.main({report = {showlinks=true}, duration = 1})
 end
