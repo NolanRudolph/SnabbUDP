@@ -16,7 +16,6 @@ local raw_sock = require("apps.socket.raw")
 local ffi =      require("ffi")
 local C = ffi.C
 
-local PROTO_IPV4 = C.htons(0x800)
 
 function Sender:new(args)
 	print("Hi! You made it to Sender:new()!")
@@ -38,9 +37,9 @@ function Sender:new(args)
 	{
 		ether = ethernet:new(
 		{
-			ether_shost = self._mac,
-			ether_dhost = "90:e2:ba:b3:ba:08",
-			ether_type = PROTO_IPV4
+			src = self._mac,
+			dst = ethernet:pton("90:e2:ba:b3:ba:08"),
+			type = 0x0800
 		}),
 		ip = ipv4:new(
 		{
@@ -61,7 +60,6 @@ function Sender:new(args)
 		payload_length = file_size,
 		payload = io.read("*all")
 	}
-	print("Payload length is " .. file_size)
 	return setmetatable(o, {__index = Sender})
 end
 
