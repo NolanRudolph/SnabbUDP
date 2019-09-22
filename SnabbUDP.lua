@@ -25,6 +25,7 @@ function Sender:new(args)
 	ip_dst = args["ip_dst"]
 	port = args["port"]
 
+	print("ip_dst = " .. ip_dst)
 	-- Get total length of file
 	local start = data_file:seek()
 	local file_size = data_file:seek("end")
@@ -43,12 +44,12 @@ function Sender:new(args)
 		}),
 		ip = ipv4:new(
 		{
-	                ihl_v_tos = 0x4500,
+	              	ihl = 0x4500,
         	        -- IMPLEMENT total_length = ???
                 	ttl = 255,
 	                protocol = 17,
         	        -- IMPLEMENT checksum = ???
-                	dst_ip = ip_dst
+                	dst = ipv4:pton(ip_dst)
 		}),
 		udp = udp:new(
 		{
