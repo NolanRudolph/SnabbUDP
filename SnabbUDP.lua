@@ -2,31 +2,49 @@ module(..., package.seeall)
 
 Sender = {}
 
-local ffi =      require("ffi")
 local link =     require("core.link")
 local app =      require("core.app")
 local lib =      require("core.lib")
+local config =   require("core.config")
 local packet =   require("core.packet")
 local ethernet = require("lib.protocol.ethernet")
 local ipv4 =     require("lib.protocol.ipv4")
 local udp =      require("lib.protocol.udp")
 local datagram = require("lib.protocol.datagram")
 local raw_sock = require("apps.socket.raw")
-local transmit, receive = link.transmit, link.receive
 
+local ffi =      require("ffi")
+local C = ffi.C
 
-function Sender:new(data, ip_dst, port)
+local PROTO_IPV4 = C.htons(0x800)
+
+function Sender:new(args)
 	print("Hi! You made it to Sender:new()!")
+
+	-- Set variables using args
+	data_file = io.open(args["data"], "r")
+	ip_dst = args["ip_dst"]
+	port = args["port"]
+
+	-- Get total length of file
+	local start = data_file:seek()
+	local file_size = data_file:seek("end")
+	data_file:seek("set", start)
+
+	-- Set input file as data for io.read("*all")
+	io.input(data_file)
+
 	local o = 
 	{
 		ether = ethernet:new(
 		{
+			ether_shost = self._mac,
 			ether_dhost = "90:e2:ba:b3:ba:08",
-			ether_type = 8
+			ether_type = PROTO_IPV4
 		}),
 		ip = ipv4:new(
 		{
-	                ihl_v_tos = bit.lshift(4, 12) + bit.lshift(20, 8),
+	                ihl_v_tos = 0x4500,
         	        -- IMPLEMENT total_length = ???
                 	ttl = 255,
 	                protocol = 17,
@@ -39,31 +57,37 @@ function Sender:new(data, ip_dst, port)
                 	-- IMPLEMENT len = ???
                 	-- IMPLEMENT checksum = ???
 		}),
-		dgram = datagram:new()
+		dgram = datagram:new(),
+		payload_length = file_size,
+		payload = io.read("*all")
 	}
+	print("Payload length is " .. file_size)
 	return setmetatable(o, {__index = Sender})
 end
 
 function Sender:gen_packet()
 	local p = packet.allocate()
-	-- Size of Ethernet Header = 14
-        -- Size of IP Header = 20
-        -- Size of UDP Header = 8
-        -- Size of entire packet = 14 + 20 + 8 + Payload = 42 + Payload
-	p.length = 42	
-
+	
 	self.dgram:new(p)
 	self.dgram:push(self.udp)
 	self.dgram:push(self.ip)
 	self.dgram:push(self.ether)
+	self.dgram:payload(self.payload, self.payload_length)
+	
 	return self.dgram:packet()
 end
 
+
 function Sender:pull()
-	print("Sending packet!")
-	return self:gen_packet()
+	assert(self.output.output, "No compatible output port found.")
+	-- print("Sending packet!")
+	link.transmit(self.output.output, self:gen_packet())
 end
 
+function test_ports(app, name)
+	assert(app.input, "No input port found for " .. name .. ".")
+	assert(app.output, "No output port found for " .. name .. ".")
+end
 
 
 function run (args)
@@ -85,12 +109,10 @@ function run (args)
 	local c = config.new()
 	local RawSocket = raw_sock.RawSocket
 	config.app(c, "server", RawSocket, IF)
-        
-	sender = Sender:new()
-	config.app(c, "sender", sender, 
-		   {data=data_file, ip_dst=ip_dst, port=port})
-	config.link(c, "sender.output->server.input")
-	
+	config.app(c, "sender", Sender, {data=data_file, ip_dst=ip_dst, port=tonumber(port)}) 
+	config.link(c, "sender.output->server.rx")
+	--config.link(c, "server.rx->server.tx")
+	--print("Link server.input has " .. link.nreadable(RawSocket) .. " packets.")
 	engine.configure(c)
         engine.main({report = {showlinks=true}, duration = 1})
 end
