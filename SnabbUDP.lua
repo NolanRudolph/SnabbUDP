@@ -80,7 +80,6 @@ function Sender:gen_packet()
 			self.dgram:push(self.ether)
 			if cur_char + SAFE_SIZE > self.payload_size then
 				payload = string.sub(self.payload, cur_char, self.payload_size)
-				print("PAYLOAD IS " .. payload)
 				self.dgram:payload(payload, self.payload_size - cur_char)
 			else
 				payload = string.sub(self.payload, cur_char, cur_char + SAFE_SIZE)
@@ -106,7 +105,6 @@ end
 
 
 function Sender:pull()
-	print("Hi im trying to pull!")
 	assert(self.output.output, "No compatible output port found.")
 	gen_pack_ret = self:gen_packet()
 	if type(gen_pack_ret) == "table" then
@@ -130,7 +128,6 @@ end
 
 function run (args)
         if not (#args == 4) then
-                -- print("Usage: send_data <data> <PCI addr> <interface> <ether> <IP> <port>")
 		print("Usage: SnabbUDP <data> <IF> <IP> <port>")
 		print("       data : File containing comma-separated numbers (e.g. 10,12.4,32)")
 		print("       IF   : Interface for packet(s) to be sent on")
@@ -149,7 +146,6 @@ function run (args)
 	config.app(c, "server", RawSocket, IF)
 	config.app(c, "sender", Sender, {data=data_file, ip_dst=ip_dst, port=tonumber(port)}) 
 	config.link(c, "sender.output->server.rx")
-	config.link(c, "server.rx->server.tx")
 
 	engine.configure(c)
         engine.main({report = {showlinks=true}, done = is_done})
