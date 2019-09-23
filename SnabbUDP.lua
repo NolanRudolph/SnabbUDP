@@ -14,7 +14,7 @@ local raw_sock = require("apps.socket.raw")
 local ffi =      require("ffi")
 local C = ffi.C
 
-
+is_done = false
 Sender = {}
 
 function Sender:new(args)
@@ -58,28 +58,73 @@ function Sender:new(args)
                 	-- IMPLEMENT checksum = ???
 		}),
 		dgram = datagram:new(),
-		payload_length = file_size,
+		payload_size = file_size,
 		payload = io.read("*all")
 	}
 	return setmetatable(o, {__index = Sender})
 end
 
 function Sender:gen_packet()
-	local p = packet.allocate()
+	local SAFE_SIZE = 1300
+	-- Spread the data amongst multiple packets if > MTU
+	-- 1342 (1300 + layers) is a safe bet for not being dropped
+	if self.payload_size > SAFE_SIZE then
+		local num_packets = math.ceil(self.payload_size / SAFE_SIZE)
+		local packet_list = {}
+		local cur_char = 0
+		for i = 1, num_packets do
+			local p = packet.allocate()
+			self.dgram:new(p)
+			self.dgram:push(self.udp)
+			self.dgram:push(self.ip)
+			self.dgram:push(self.ether)
+			if cur_char + SAFE_SIZE > self.payload_size then
+				payload = string.sub(self.payload, cur_char, self.payload_size)
+				print("PAYLOAD IS " .. payload)
+				self.dgram:payload(payload, self.payload_size - cur_char)
+			else
+				payload = string.sub(self.payload, cur_char, cur_char + SAFE_SIZE)
+				self.dgram:payload(payload, SAFE_SIZE)
+			end
+			
+			cur_char = cur_char + SAFE_SIZE
+			table.insert(packet_list, self.dgram:packet())
+		end
+		return packet_list
+	else
+		local p = packet.allocate()
 	
-	self.dgram:new(p)
-	self.dgram:push(self.udp)
-	self.dgram:push(self.ip)
-	self.dgram:push(self.ether)
-	self.dgram:payload(self.payload, self.payload_length)
+		self.dgram:new(p)
+		self.dgram:push(self.udp)
+		self.dgram:push(self.ip)
+		self.dgram:push(self.ether)
+		self.dgram:payload(self.payload, self.payload_size)
 	
-	return self.dgram:packet()
+		return self.dgram:packet()
+	end
 end
 
 
 function Sender:pull()
+	print("Hi im trying to pull!")
 	assert(self.output.output, "No compatible output port found.")
-	link.transmit(self.output.output, self:gen_packet())
+	gen_pack_ret = self:gen_packet()
+	if type(gen_pack_ret) == "table" then
+		for i = 1, #gen_pack_ret do
+			link.transmit(self.output.output, gen_pack_ret[i])
+		end
+	else
+		link.transmit(self.output.output, gen_pack_ret)
+	end
+	is_done = true
+end
+
+function is_done()
+	if is_done then
+		return true
+	else
+		return false
+	end
 end
 
 
@@ -107,5 +152,5 @@ function run (args)
 	config.link(c, "server.rx->server.tx")
 
 	engine.configure(c)
-        engine.main({report = {showlinks=true}, duration = 1})
+        engine.main({report = {showlinks=true}, done = is_done})
 end
