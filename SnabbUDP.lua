@@ -20,43 +20,43 @@ Sender = {}
 function Sender:new(args)
 	print("Hi! You made it to Sender:new()!")
 
-	-- Set variables using args
+	-- Set variables using args indexing
 	data_file = io.open(args["data"], "r")
 	ip_dst = args["ip_dst"]
 	port = args["port"]
 
-	print("ip_dst = " .. ip_dst)
 	-- Get total length of file
 	local start = data_file:seek()
 	local file_size = data_file:seek("end")
 	data_file:seek("set", start)
 
-	-- Set input file as data for io.read("*all")
+	-- Set input file as data for io.read("*all") [Line 61]
 	io.input(data_file)
 
 	local o = 
 	{
+		-- Built in Ethernet module @ lib.protocol.ethernet
 		ether = ethernet:new(
 		{
 			src = ethernet:pton("90:e2:ba:b3:75:bd"),
 			dst = ethernet:pton("90:e2:ba:b3:ba:09"),
 			type = 0x0800
 		}),
+		-- Built in IPv4 module @ lib.protocol.ipv4
 		ip = ipv4:new(
 		{
 	              	ihl = 0x4500,
-        	        -- IMPLEMENT total_length = ???
                 	ttl = 255,
 	                protocol = 17,
-        	        -- IMPLEMENT checksum = ???
                 	dst = ipv4:pton(ip_dst)
 		}),
+		-- Built in UDP module @ lib.protocol.udp
 		udp = udp:new(
 		{
 			dst_port = port,
-                	-- IMPLEMENT len = ???
-                	-- IMPLEMENT checksum = ???
 		}),
+		-- Datagram model @ lib.protocol.datagram
+		-- API for controlling network stack
 		dgram = datagram:new(),
 		payload_size = file_size,
 		payload = io.read("*all")
@@ -69,11 +69,14 @@ function Sender:gen_packet()
 	-- Spread the data amongst multiple packets if > MTU
 	-- 1342 (1300 + layers) is a safe bet for not being dropped
 	if self.payload_size > SAFE_SIZE then
+		-- Assess if there's a need to use multiple packets to encase payload
 		local num_packets = math.ceil(self.payload_size / SAFE_SIZE)
 		local packet_list = {}
 		local cur_char = 0
+		-- Loop until all the payload is encased by packets
 		for i = 1, num_packets do
 			local p = packet.allocate()
+			-- New layers can be pushed onto a network stack
 			self.dgram:new(p)
 			self.dgram:push(self.udp)
 			self.dgram:push(self.ip)
@@ -90,7 +93,7 @@ function Sender:gen_packet()
 			table.insert(packet_list, self.dgram:packet())
 		end
 		return packet_list
-	else
+	else    -- Only one packet is needed
 		local p = packet.allocate()
 	
 		self.dgram:new(p)
@@ -107,16 +110,20 @@ end
 function Sender:pull()
 	assert(self.output.output, "No compatible output port found.")
 	gen_pack_ret = self:gen_packet()
+	-- Check to see if Sender:gen_packet() created multiple packets to encase payload
 	if type(gen_pack_ret) == "table" then
+		-- If so, loop through packets and transmit to RawSocket
 		for i = 1, #gen_pack_ret do
 			link.transmit(self.output.output, gen_pack_ret[i])
 		end
-	else
+	else	-- Otherwise, we got a single packet to send to RawSocket
 		link.transmit(self.output.output, gen_pack_ret)
 	end
-	is_done = true
+	is_done = true  -- See is_done()
 end
 
+-- Function that is repeatedly called by core.engine
+-- is_done turns true IFF all the payload has been transferred
 function is_done()
 	if is_done then
 		return true
@@ -143,10 +150,14 @@ function run (args)
 	
 	local c = config.new()
 	local RawSocket = raw_sock.RawSocket
+	-- Configure the RawSocket to the app using the interface
 	config.app(c, "server", RawSocket, IF)
-	config.app(c, "sender", Sender, {data=data_file, ip_dst=ip_dst, port=tonumber(port)}) 
+	-- Configure a Sender object to the app // Calls Sender:new()
+	config.app(c, "sender", Sender, {data=data_file, ip_dst=ip_dst, port=tonumber(port)})
+	-- Link Sender's output (Sender:pull()) with the RawSocket
 	config.link(c, "sender.output->server.rx")
 
 	engine.configure(c)
+	-- Run until all payloads are completed // See is_done()
         engine.main({report = {showlinks=true}, done = is_done})
 end
